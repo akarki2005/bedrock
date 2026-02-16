@@ -16,15 +16,21 @@ This project is an exploration of storage engine primitives, specifically focusi
 
 ## Project Structure
 
-`internal/tree/`: Red-Black Tree logic (State Machine).
-
-`internal/wal/`: Append-only log management.
-
-`internal/sstable/`: Binary serialization and disk-to-memory mapping.
-
-`internal/compaction/`: Leveled merge-sort workers.
-
-`package/engine/`: Main API entry points.
+```text
+.
+├── cmd/
+│   └── lsm-cli/           # CLI for testing/debugging
+├── internal/              
+│   ├── compaction/        # Background workers for merges
+│   ├── entry/             # Serialization/deserialization
+│   ├── memtable/          # In-memory state
+│   ├── sstable/           # Disk-to-memory mapping
+│   └── wal/               # Append-only write-ahead log
+├── pkg/                   
+│   └── engine/            # API entry points
+├── go.mod                 
+└── README.md
+```              
 
 ## Constraints & Trade-offs
 
