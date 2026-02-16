@@ -24,7 +24,7 @@ This project is an exploration of storage engine primitives, specifically focusi
 
 `internal/compaction/`: Leveled merge-sort workers.
 
-`pkg/engine/`: Main API entry points.
+`package/engine/`: Main API entry points.
 
 ## Constraints & Trade-offs
 
