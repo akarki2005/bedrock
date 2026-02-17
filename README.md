@@ -39,3 +39,45 @@ This project is an exploration of storage engine primitives, specifically focusi
 **Byte-oriented**: All keys and values are handled as []byte to avoid GC overhead and unnecessary string allocations.
 
 **Write Amplification**: The choice of leveled compaction assumes a workload where read performance and storage efficiency are more critical than raw write speed.
+
+## Testing
+
+All tests should be run from the root directory.
+
+Run all tests:
+
+```bash
+go test ./...
+```
+
+Verbose output:
+
+```bash
+go test -v ./...
+```
+
+Run tests for a specific package:
+
+```bash
+go test ./{package_name}
+```
+
+Run a single test by name:
+
+```bash
+go test ./{package_name} -run {test_name}
+```
+
+### Quality checks
+
+Run with race detector:
+
+```bash
+go test -race ./...
+```
+
+Collect coverage:
+
+```bash
+go test -cover ./...
+```
