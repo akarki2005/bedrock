@@ -79,12 +79,18 @@ func Decode(buffer []byte) (*Entry, error) {
 	key := buffer[HeaderSize:HeaderSize + int(keyLen)]
 	value := buffer[HeaderSize + int(keyLen):HeaderSize + int(keyLen) + int(valLen)]
 
-	return &Entry{
+	entry := &Entry{
 		Key: key,
 		Value: value,
 		Timestamp: int64(timestamp),
 		Checksum: checksum,
-	}, nil
+	}
+
+	if entry.calculateChecksum() != checksum {
+		return nil, errors.New("checksum mismatch: data corruption detected")
+	}
+
+	return entry, nil
 }
 
 // generates a checksum for each data record to ensure data integrity
