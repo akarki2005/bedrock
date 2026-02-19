@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"encoding/binary"
 	"io"
+	"errors"
 )
 
 const (
@@ -15,10 +16,13 @@ const (
 	PERMISSIONS_RWX = 0o755
 )
 
+var ErrClosed = errors.New("WAL is closed")
+
 type WAL struct {
 	mutex	sync.Mutex
 	file 	*os.File
 	path 	string
+	closed	bool
 }
 
 func Open(path string) (*WAL, error) {
@@ -43,6 +47,8 @@ func (wal *WAL) Append(e *entry.Entry) error {
 	wal.mutex.Lock()
 	defer wal.mutex.Unlock()
 
+	if wal.closed { return ErrClosed}
+
 	payload := e.Encode()
 
 	// store payload length as metadata for each wal record
@@ -64,6 +70,8 @@ func (wal *WAL) Replay(fn func(*entry.Entry) error) error {
 	wal.mutex.Lock()
 	defer wal.mutex.Unlock()
 
+	if wal.closed { return ErrClosed }
+
 	if _, err := wal.file.Seek(0, io.SeekStart); err != nil {
 		return fmt.Errorf("seek WAL start: %w", err)
 	}
@@ -74,7 +82,7 @@ func (wal *WAL) Replay(fn func(*entry.Entry) error) error {
 	for {
 		_, err := io.ReadFull(wal.file, bufferLen[:])
 
-		if err == io.EOF {
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
 			return nil
 		}
 
@@ -89,6 +97,9 @@ func (wal *WAL) Replay(fn func(*entry.Entry) error) error {
 
 		payload := make([]byte, n)
 		if _, err := io.ReadFull(wal.file, payload); err != nil {
+			if err == io.ErrUnexpectedEOF {
+				return nil
+			}
 			return fmt.Errorf("read WAL record payload: %w", err)
 		}
 
@@ -108,6 +119,8 @@ func (wal *WAL) Close() error {
 	wal.mutex.Lock()
 	defer wal.mutex.Unlock()
 
+	if wal.closed {return nil}
+
 	if err := wal.file.Sync(); err != nil {
 		return fmt.Errorf("sync WAL on close: %w", err)
 	}
@@ -115,6 +128,8 @@ func (wal *WAL) Close() error {
 	if err := wal.file.Close(); err != nil {
 		return fmt.Errorf("close WAL file: %w", err)
 	}
+
+	wal.closed = true
 
 	return nil
 }
