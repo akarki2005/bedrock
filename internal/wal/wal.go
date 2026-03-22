@@ -82,7 +82,7 @@ func (wal *WAL) Replay(fn func(*entry.Entry) error) error {
 	for {
 		_, err := io.ReadFull(wal.file, bufferLen[:])
 
-		if err == io.EOF || err == io.ErrUnexpectedEOF {
+		if err == io.EOF {
 			return nil
 		}
 
@@ -97,9 +97,6 @@ func (wal *WAL) Replay(fn func(*entry.Entry) error) error {
 
 		payload := make([]byte, n)
 		if _, err := io.ReadFull(wal.file, payload); err != nil {
-			if err == io.ErrUnexpectedEOF {
-				return nil
-			}
 			return fmt.Errorf("read WAL record payload: %w", err)
 		}
 
