@@ -16,8 +16,8 @@ const (
 )
 
 type node struct {
-	entry   *entry.Entry
-	forward []*node
+	entry     *entry.Entry
+	successor []*node
 }
 
 type MemTable struct {
@@ -31,7 +31,7 @@ type MemTable struct {
 func New() *MemTable {
 	return &MemTable{
 		head: &node{
-			forward: make([]*node, maxLevel),
+			successor: make([]*node, maxLevel),
 		},
 		level: 1,
 		rng:   rand.New(rand.NewSource(time.Now().UnixNano())),
@@ -56,7 +56,7 @@ func (m *MemTable) Put(e *entry.Entry) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	update, curr := m.find(e.Key)
+	predecessor, curr := m.find(e.Key)
 
 	if curr != nil && bytes.Equal(curr.entry.Key, e.Key) {
 		curr.entry = cloneEntry(e)
@@ -66,19 +66,19 @@ func (m *MemTable) Put(e *entry.Entry) error {
 	lvl := m.randomLevel()
 	if lvl > m.level {
 		for i := m.level; i < lvl; i++ {
-			update[i] = m.head
+			predecessor[i] = m.head
 		}
 		m.level = lvl
 	}
 
 	n := &node{
-		entry:   cloneEntry(e),
-		forward: make([]*node, lvl),
+		entry:     cloneEntry(e),
+		successor: make([]*node, lvl),
 	}
 
 	for i := 0; i < lvl; i++ {
-		n.forward[i] = update[i].forward[i]
-		update[i].forward[i] = n
+		n.successor[i] = predecessor[i].successor[i]
+		predecessor[i].successor[i] = n
 	}
 
 	m.size++
@@ -91,12 +91,12 @@ func (m *MemTable) Get(key []byte) (*entry.Entry, bool) {
 
 	curr := m.head
 	for i := m.level - 1; i >= 0; i-- {
-		for curr.forward[i] != nil && bytes.Compare(curr.forward[i].entry.Key, key) < 0 {
-			curr = curr.forward[i]
+		for curr.successor[i] != nil && bytes.Compare(curr.successor[i].entry.Key, key) < 0 {
+			curr = curr.successor[i]
 		}
 	}
 
-	curr = curr.forward[0]
+	curr = curr.successor[0]
 	if curr != nil && bytes.Equal(curr.entry.Key, key) {
 		return cloneEntry(curr.entry), true
 	}
@@ -108,7 +108,7 @@ func (m *MemTable) Scan(fn func(*entry.Entry) error) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	for curr := m.head.forward[0]; curr != nil; curr = curr.forward[0] {
+	for curr := m.head.successor[0]; curr != nil; curr = curr.successor[0] {
 		if err := fn(cloneEntry(curr.entry)); err != nil {
 			return fmt.Errorf("scan callback: %w", err)
 		}
@@ -118,17 +118,17 @@ func (m *MemTable) Scan(fn func(*entry.Entry) error) error {
 }
 
 func (m *MemTable) find(key []byte) ([maxLevel]*node, *node) {
-	var update [maxLevel]*node
+	var predecessor [maxLevel]*node
 	curr := m.head
 
 	for i := m.level - 1; i >= 0; i-- {
-		for curr.forward[i] != nil && bytes.Compare(curr.forward[i].entry.Key, key) < 0 {
-			curr = curr.forward[i]
+		for curr.successor[i] != nil && bytes.Compare(curr.successor[i].entry.Key, key) < 0 {
+			curr = curr.successor[i]
 		}
-		update[i] = curr
+		predecessor[i] = curr
 	}
-	curr = curr.forward[0]
-	return update, curr
+	curr = curr.successor[0]
+	return predecessor, curr
 }
 
 func (m *MemTable) randomLevel() int {
