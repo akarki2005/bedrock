@@ -22,15 +22,10 @@ A log-structured merge-tree (LSM) storage engine for key-value data, implemented
 
 ## Installation
 
-```
-git clone https://github.com/akarki2005/lsm-engine.git
+```bash
+git clone git@github.com:akarki2005/lsm-engine.git
 cd lsm-engine
-go mod tidy
 ```
-
-## CLI Usage
-
-(coming soon)
 
 ## Testing
 
@@ -38,4 +33,17 @@ Run all tests:
 
 ```bash
 go test ./...
+```
+
+Verbose output:
+
+```bash
+go test -v ./...
+```
+
+## CLI Usage
+
+```bash
+go run ./cmd/lsm-cli -path ./data put <key> <value>
+go run ./cmd/lsm-cli -path ./data get <key>
 ```
