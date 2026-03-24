@@ -25,7 +25,7 @@ func TestNewInitializesTimestampAndChecksum(t *testing.T) {
 		t.Fatalf("timestamp out of expected range: got %d", e.Timestamp)
 	}
 
-	wantChecksum := checksumFor(e.Timestamp, key, value)
+	wantChecksum := checksumFor(e.Timestamp, false, key, value)
 	if e.Checksum != wantChecksum {
 		t.Fatalf("checksum mismatch: got %d want %d", e.Checksum, wantChecksum)
 	}
@@ -36,6 +36,7 @@ func TestEncodeWritesExpectedBinaryLayout(t *testing.T) {
 		Key:       []byte("zayne"),
 		Value:     []byte("parekh"),
 		Timestamp: 1700000000,
+		Tombstone: false,
 	}
 	e.Checksum = e.calculateChecksum()
 
@@ -68,6 +69,12 @@ func TestEncodeWritesExpectedBinaryLayout(t *testing.T) {
 		t.Fatalf("encoded value length mismatch: got %d want %d", gotValLen, len(e.Value))
 	}
 
+	tombstoneStart := valLenStart + ValLenSize
+	gotTombstone := encoded[tombstoneStart]
+	if gotTombstone != 0 {
+		t.Fatalf("encoded tombstone mistmatch: got %d want %d", gotTombstone, 0)
+	}
+
 	gotKey := encoded[HeaderSize : HeaderSize+len(e.Key)]
 	gotVal := encoded[HeaderSize+len(e.Key):]
 	if !bytes.Equal(gotKey, e.Key) {
@@ -79,29 +86,55 @@ func TestEncodeWritesExpectedBinaryLayout(t *testing.T) {
 }
 
 func TestEncodeDecodeRoundTrip(t *testing.T) {
-	original := &Entry{
-		Key:       []byte("zeev"),
-		Value:     []byte("buium"),
-		Timestamp: 1700000100,
+	tests := []struct {
+		name string
+		e    *Entry
+	}{
+		{
+			name: "normal",
+			e: &Entry{
+				Key:       []byte("zeev"),
+				Value:     []byte("buium"),
+				Timestamp: 1700000100,
+				Tombstone: false,
+			},
+		},
+		{
+			name: "tombstone",
+			e: &Entry{
+				Key:       []byte("zeev"),
+				Value:     nil,
+				Timestamp: 1700000100,
+				Tombstone: true,
+			},
+		},
 	}
-	original.Checksum = original.calculateChecksum()
 
-	decoded, err := Decode(original.Encode())
-	if err != nil {
-		t.Fatalf("decode failed: %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.e.Checksum = tt.e.calculateChecksum()
 
-	if !bytes.Equal(decoded.Key, original.Key) {
-		t.Fatalf("decoded key mismatch: got %q want %q", decoded.Key, original.Key)
-	}
-	if !bytes.Equal(decoded.Value, original.Value) {
-		t.Fatalf("decoded value mismatch: got %q want %q", decoded.Value, original.Value)
-	}
-	if decoded.Timestamp != original.Timestamp {
-		t.Fatalf("decoded timestamp mismatch: got %d want %d", decoded.Timestamp, original.Timestamp)
-	}
-	if decoded.Checksum != original.Checksum {
-		t.Fatalf("decoded checksum mismatch: got %d want %d", decoded.Checksum, original.Checksum)
+			decoded, err := Decode(tt.e.Encode())
+			if err != nil {
+				t.Fatalf("decode failed: %v", err)
+			}
+
+			if !bytes.Equal(decoded.Key, tt.e.Key) {
+				t.Fatalf("decoded key mismatch: got %q want %q", decoded.Key, tt.e.Key)
+			}
+			if !bytes.Equal(decoded.Value, tt.e.Value) {
+				t.Fatalf("decoded value mismatch: got %q want %q", decoded.Value, tt.e.Value)
+			}
+			if decoded.Timestamp != tt.e.Timestamp {
+				t.Fatalf("decoded timestamp mismatch: got %d want %d", decoded.Timestamp, tt.e.Timestamp)
+			}
+			if decoded.Checksum != tt.e.Checksum {
+				t.Fatalf("decoded checksum mismatch: got %d want %d", decoded.Checksum, tt.e.Checksum)
+			}
+			if decoded.Tombstone != tt.e.Tombstone {
+				t.Fatalf("decoded tombstone mismatch: got %v want %v", decoded.Tombstone, tt.e.Tombstone)
+			}
+		})
 	}
 }
 
@@ -136,10 +169,17 @@ func TestChecksumChangesWhenPayloadChanges(t *testing.T) {
 	}
 }
 
-func checksumFor(timestamp int64, key, value []byte) uint32 {
-	buf := make([]byte, TimestampSize+len(key)+len(value))
+func checksumFor(timestamp int64, tombstone bool, key, value []byte) uint32 {
+	buf := make([]byte, TimestampSize+TombstoneSize+len(key)+len(value))
 	binary.LittleEndian.PutUint64(buf[:TimestampSize], uint64(timestamp))
-	copy(buf[TimestampSize:TimestampSize+len(key)], key)
-	copy(buf[TimestampSize+len(key):], value)
+
+	if tombstone {
+		buf[TimestampSize] = 1
+	} else {
+		buf[TimestampSize] = 0
+	}
+
+	copy(buf[TimestampSize+TombstoneSize:TimestampSize+TombstoneSize+len(key)], key)
+	copy(buf[TimestampSize+TombstoneSize+len(key):], value)
 	return crc32.ChecksumIEEE(buf)
 }
