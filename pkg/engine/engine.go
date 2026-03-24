@@ -49,7 +49,7 @@ func (e *Engine) Put(key, value []byte) error {
 func (e *Engine) Get(key []byte) ([]byte, bool, error) {
 	ent, ok := e.memtable.Get(key)
 
-	if !ok {
+	if !ok || ent.Tombstone {
 		return nil, false, nil
 	}
 

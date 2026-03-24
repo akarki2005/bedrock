@@ -185,3 +185,20 @@ func TestScanWrapsCallbackError(t *testing.T) {
 		t.Fatalf("unexpected error message: got %q want %q", got, wantMsg)
 	}
 }
+
+func TestPutGetPreservesTombstone(t *testing.T) {
+	m := New()
+
+	e := entry.NewTombstone([]byte("calgary"))
+	if err := m.Put(e); err != nil {
+		t.Fatalf("put failed: %v", err)
+	}
+
+	got, ok := m.Get([]byte("calgary"))
+	if !ok {
+		t.Fatal("expected key to be present")
+	}
+	if !got.Tombstone {
+		t.Fatal("expected tombstone to be preserved")
+	}
+}

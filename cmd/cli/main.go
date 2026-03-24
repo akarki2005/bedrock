@@ -10,8 +10,9 @@ import (
 
 func usage() {
 	fmt.Fprintf(os.Stderr, `Usage:
-	lsm-cli -path <dbdir> put <key> <value>
-	lsm-cli -path <dbdir> get <key>
+	./lsm-cli -path ./data put <key> <value>
+	./lsm-cli -path ./data get <key>
+	./lsm-cli -path ./data delete <key>
 	`)
 	os.Exit(1)
 }
@@ -66,6 +67,18 @@ func main() {
 		}
 
 		fmt.Printf("%s\n", value)
+	case "delete":
+		if flag.NArg() != 2 {
+			usage()
+		}
+
+		key := []byte(flag.Arg(1))
+
+		if err := db.Delete(key); err != nil {
+			fmt.Fprintf(os.Stderr, "delete: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("ok")
 	default:
 		usage()
 	}

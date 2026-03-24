@@ -43,7 +43,16 @@ go test -v ./...
 
 ## CLI Usage
 
+Build:
+
 ```bash
-go run ./cmd/cli -path ./data put <key> <value>
-go run ./cmd/cli -path ./data get <key>
+go build -o lsm-cli ./cmd/cli
+```
+
+Operations:
+
+```bash
+./lsm-cli -path ./data put <key> <value>
+./lsm-cli -path ./data get <key>
+./lsm-cli -path ./data delete <key>
 ```

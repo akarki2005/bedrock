@@ -144,8 +144,11 @@ func cloneEntry(e *entry.Entry) *entry.Entry {
 		return nil
 	}
 
-	key := append([]byte(nil), e.Key...)
-	value := append([]byte(nil), e.Value...)
-
-	return entry.New(key, value)
+	return &entry.Entry{
+		Key:       append([]byte(nil), e.Key...),
+		Value:     append([]byte(nil), e.Value...),
+		Timestamp: e.Timestamp,
+		Checksum:  e.Checksum,
+		Tombstone: e.Tombstone,
+	}
 }
