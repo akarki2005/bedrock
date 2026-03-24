@@ -44,6 +44,6 @@ go test -v ./...
 ## CLI Usage
 
 ```bash
-go run ./cmd/lsm-cli -path ./data put <key> <value>
-go run ./cmd/lsm-cli -path ./data get <key>
+go run ./cmd/cli -path ./data put <key> <value>
+go run ./cmd/cli -path ./data get <key>
 ```
