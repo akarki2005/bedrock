@@ -1,1 +1,1 @@
-// TODO: background sstable merge logic
+package compaction

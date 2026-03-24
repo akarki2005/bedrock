@@ -1,1 +1,1 @@
-// TODO: sstables for persistence
+package sstable
