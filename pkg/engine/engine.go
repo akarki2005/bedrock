@@ -57,6 +57,20 @@ func (e *Engine) Get(key []byte) ([]byte, bool, error) {
 	return value, true, nil
 }
 
+func (e *Engine) Delete(key []byte) error {
+	entry := entry.NewTombstone(key)
+
+	if err := e.wal.Append(entry); err != nil {
+		return fmt.Errorf("append tombstone to WAL: %w", err)
+	}
+
+	if err := e.memtable.Put(entry); err != nil {
+		return fmt.Errorf("put tombstone into memtable: %w", err)
+	}
+
+	return nil
+}
+
 func (e *Engine) Close() error {
 	if err := e.wal.Close(); err != nil {
 		return fmt.Errorf("close WAL: %w", err)
