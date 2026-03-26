@@ -1,6 +1,12 @@
-# LSM Storage Engine
+<div align="center">
 
-A log-structured merge-tree (LSM) storage engine for key-value data, implemented in Go.
+# LSM Storage Engine   
+
+[![codecov](https://codecov.io/gh/akarki2005/lsm-engine/branch/main/graph/badge.svg)](https://codecov.io/gh/akarki2005/lsm-engine)
+
+A log-structured merge-tree (LSM) storage engine for key-value data, written in Go.
+
+</div>
 
 ## Project Structure
 
