@@ -3,7 +3,9 @@ package entry
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"hash/crc32"
+	"io"
 	"time"
 )
 
@@ -112,6 +114,59 @@ func Decode(buffer []byte) (*Entry, error) {
 	}
 
 	return entry, nil
+}
+
+func (e *Entry) WriteTo(w io.Writer) error {
+	if e == nil {
+		return errors.New("cannot write a nil entry")
+	}
+
+	encoded := e.Encode()
+	n, err := w.Write(encoded)
+	if err != nil {
+		return fmt.Errorf("write entry: %w", err)
+	}
+	if n != len(encoded) {
+		return errors.New("not all bytes in encoded entry were written")
+	}
+
+	return nil
+}
+
+func ReadFrom(r io.Reader) (*Entry, error) {
+	header := make([]byte, HeaderSize)
+
+	n, err := io.ReadFull(r, header)
+	if err == io.EOF && n == 0 {
+		return nil, io.EOF
+	}
+	if err == io.ErrUnexpectedEOF {
+		return nil, errors.New("truncated header")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	keyLenOffset := ChecksumSize + TimestampSize
+	keyLen := binary.LittleEndian.Uint32(header[keyLenOffset : keyLenOffset+KeyLenSize])
+
+	valLenOffset := keyLenOffset + KeyLenSize
+	valLen := binary.LittleEndian.Uint32(header[valLenOffset : valLenOffset+ValLenSize])
+
+	payloadLen := int(keyLen) + int(valLen)
+
+	record := make([]byte, HeaderSize+payloadLen)
+	copy(record[:HeaderSize], header)
+
+	_, err = io.ReadFull(r, record[HeaderSize:])
+	if err == io.ErrUnexpectedEOF {
+		return nil, errors.New("truncated payload")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return Decode(record)
 }
 
 func CloneEntry(e *Entry) *Entry {
