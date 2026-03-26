@@ -114,6 +114,20 @@ func Decode(buffer []byte) (*Entry, error) {
 	return entry, nil
 }
 
+func CloneEntry(e *Entry) *Entry {
+	if e == nil {
+		return nil
+	}
+
+	return &Entry{
+		Key:       append([]byte(nil), e.Key...),
+		Value:     append([]byte(nil), e.Value...),
+		Timestamp: e.Timestamp,
+		Checksum:  e.Checksum,
+		Tombstone: e.Tombstone,
+	}
+}
+
 // generates a checksum for each data record to ensure data integrity
 func (e *Entry) calculateChecksum() uint32 {
 	buffer := make([]byte, TimestampSize+TombstoneSize+len(e.Key)+len(e.Value))

@@ -59,7 +59,7 @@ func (m *MemTable) Put(e *entry.Entry) error {
 	predecessor, curr := m.find(e.Key)
 
 	if curr != nil && bytes.Equal(curr.entry.Key, e.Key) {
-		curr.entry = cloneEntry(e)
+		curr.entry = entry.CloneEntry(e)
 		return nil
 	}
 
@@ -72,7 +72,7 @@ func (m *MemTable) Put(e *entry.Entry) error {
 	}
 
 	n := &node{
-		entry:     cloneEntry(e),
+		entry:     entry.CloneEntry(e),
 		successor: make([]*node, lvl),
 	}
 
@@ -98,7 +98,7 @@ func (m *MemTable) Get(key []byte) (*entry.Entry, bool) {
 
 	curr = curr.successor[0]
 	if curr != nil && bytes.Equal(curr.entry.Key, key) {
-		return cloneEntry(curr.entry), true
+		return entry.CloneEntry(curr.entry), true
 	}
 
 	return nil, false
@@ -109,7 +109,7 @@ func (m *MemTable) Scan(fn func(*entry.Entry) error) error {
 	defer m.mu.RUnlock()
 
 	for curr := m.head.successor[0]; curr != nil; curr = curr.successor[0] {
-		if err := fn(cloneEntry(curr.entry)); err != nil {
+		if err := fn(entry.CloneEntry(curr.entry)); err != nil {
 			return fmt.Errorf("scan callback: %w", err)
 		}
 	}
@@ -137,18 +137,4 @@ func (m *MemTable) randomLevel() int {
 		lvl++
 	}
 	return lvl
-}
-
-func cloneEntry(e *entry.Entry) *entry.Entry {
-	if e == nil {
-		return nil
-	}
-
-	return &entry.Entry{
-		Key:       append([]byte(nil), e.Key...),
-		Value:     append([]byte(nil), e.Value...),
-		Timestamp: e.Timestamp,
-		Checksum:  e.Checksum,
-		Tombstone: e.Tombstone,
-	}
 }
