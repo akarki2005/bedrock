@@ -92,3 +92,49 @@ func TestCreateFromMemTableNilMemTable(t *testing.T) {
 		t.Fatalf("expected error for nil memtable")
 	}
 }
+
+func TestOpenValidPath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "table.sst")
+
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close file: %v", err)
+	}
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	if s == nil {
+		t.Fatalf("expected non-nil SSTable")
+	}
+	if s.path != path {
+		t.Fatalf("got path %q, want %q", s.path, path)
+	}
+}
+
+func TestOpenEmptyPath(t *testing.T) {
+	s, err := Open("")
+	if err == nil {
+		t.Fatalf("expected error for empty path")
+	}
+	if s != nil {
+		t.Fatalf("expected nil SSTable on error")
+	}
+}
+
+func TestOpenDirPath(t *testing.T) {
+	dir := t.TempDir()
+
+	s, err := Open(dir)
+	if err == nil {
+		t.Fatalf("expected error for directory path")
+	}
+	if s != nil {
+		t.Fatalf("expected nil SSTable on error")
+	}
+}
