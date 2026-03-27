@@ -1,8 +1,10 @@
 package sstable
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/akarki2005/lsm-engine/internal/entry"
@@ -49,16 +51,67 @@ func CreateFromMemTable(path string, m *memtable.MemTable) error {
 	return nil
 }
 
-/*
 func Open(path string) (*SSTable, error) {
+	if path == "" {
+		return nil, errors.New("empty path")
+	}
 
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("stat sstable: %w", err)
+	}
+	if info.IsDir() {
+		return nil, errors.New("sstable path points to a directory")
+	}
+
+	return &SSTable{path: path}, nil
 }
 
 func (s *SSTable) Scan(fn func(*entry.Entry) error) error {
+	file, err := os.Open(s.path)
+	if err != nil {
+		return fmt.Errorf("open sstable: %w", err)
+	}
+	defer file.Close()
 
+	for {
+		e, err := entry.ReadFrom(file)
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read entry: %w", err)
+		}
+
+		if err := fn(e); err != nil {
+			return err
+		}
+	}
 }
 
 func (s *SSTable) Get(key []byte) (*entry.Entry, bool, error) {
+	file, err := os.Open(s.path)
+	if err != nil {
+		return nil, false, fmt.Errorf("open sstable: %w", err)
+	}
+	defer file.Close()
 
+	for {
+		e, err := entry.ReadFrom(file)
+		if err == io.EOF {
+			return nil, false, nil
+		}
+		if err != nil {
+			return nil, false, fmt.Errorf("read entry: %w", err)
+		}
+
+		cmp := bytes.Compare(e.Key, key)
+
+		if cmp == 0 {
+			return e, true, nil
+		}
+		if cmp > 0 { // we're past the point where we'd have seen the key
+			return nil, false, nil
+		}
+	}
 }
-*/
