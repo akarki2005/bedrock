@@ -271,3 +271,109 @@ func TestScanCallbackError(t *testing.T) {
 		t.Fatalf("got %d callback calls, want 2", calls)
 	}
 }
+
+func TestGetFound(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "table.sst")
+
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+
+	key1, value1 := "hurricane", "katrina"
+	if err := entry.New([]byte(key1), []byte(value1)).WriteTo(f); err != nil {
+		t.Fatalf("write %v: %v", key1, err)
+	}
+
+	if err := f.Close(); err != nil {
+		t.Fatalf("close file: %v", err)
+	}
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+
+	key := "hurricane"
+	got, ok, err := s.Get([]byte(key))
+	if err != nil {
+		t.Fatalf("get %v: %v", key, err)
+	}
+	if !ok {
+		t.Fatalf("expected key %q to be found", key)
+	}
+	if got == nil {
+		t.Fatalf("expected non-nil entry")
+	}
+	if string(got.Key) != key {
+		t.Fatalf("got key %q, want %q", got.Key, key)
+	}
+
+	wantValue := "katrina"
+	if string(got.Value) != wantValue {
+		t.Fatalf("got value %q, want %q", got.Value, wantValue)
+	}
+}
+
+func TestGetNotFound(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "table.sst")
+
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+
+	key1, value1 := "hurricane", "tortilla"
+	if err := entry.New([]byte(key1), []byte(value1)).WriteTo(f); err != nil {
+		t.Fatalf("write %v: %v", key1, err)
+	}
+
+	if err := f.Close(); err != nil {
+		t.Fatalf("close file: %v", err)
+	}
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+
+	key := "typhoon"
+	got, ok, err := s.Get([]byte(key))
+	if err != nil {
+		t.Fatalf("get %v: %v", key, err)
+	}
+	if ok {
+		t.Fatalf("expected key %q to be missing", key)
+	}
+	if got != nil {
+		t.Fatalf("expected nil entry for missing key")
+	}
+}
+
+func TestGetCorruptFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "table.sst")
+
+	if err := os.WriteFile(path, []byte{1, 2, 3}, 0644); err != nil {
+		t.Fatalf("write corrupt file: %v", err)
+	}
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+
+	key := "apple"
+	got, ok, err := s.Get([]byte(key))
+	if err == nil {
+		t.Fatalf("expected error for corrupt file")
+	}
+	if ok {
+		t.Fatalf("expected ok=false for corrupt file")
+	}
+	if got != nil {
+		t.Fatalf("expected nil entry for corrupt file")
+	}
+}
