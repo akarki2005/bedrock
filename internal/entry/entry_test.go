@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"hash/crc32"
+	"io"
 	"testing"
 	"time"
 )
@@ -157,6 +158,76 @@ func TestDecodeRejectsTruncatedPayload(t *testing.T) {
 	_, err := Decode(encoded[:len(encoded)-1])
 	if err == nil {
 		t.Fatal("expected error for truncated payload, got nil")
+	}
+}
+
+func TestWriteToWritesEncodedEntry(t *testing.T) {
+	key := []byte("auston")
+	value := []byte("matthews")
+
+	e := &Entry{
+		Key:       key,
+		Value:     value,
+		Timestamp: 1700000400,
+		Tombstone: false,
+	}
+	e.Checksum = e.calculateChecksum()
+
+	var buf bytes.Buffer
+	if err := e.WriteTo(&buf); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	if !bytes.Equal(buf.Bytes(), e.Encode()) {
+		t.Fatal("written bytes do not match encoded entry")
+	}
+}
+
+func TestReadFromRoundTrip(t *testing.T) {
+	key := []byte("william")
+	value := []byte("nylander")
+
+	e := &Entry{
+		Key:       key,
+		Value:     value,
+		Timestamp: 1700000500,
+		Tombstone: false,
+	}
+	e.Checksum = e.calculateChecksum()
+
+	var buf bytes.Buffer
+	if err := e.WriteTo(&buf); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	got, err := ReadFrom(&buf)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+
+	if !bytes.Equal(got.Key, e.Key) {
+		t.Fatalf("key mismatch: got %q want %q", got.Key, e.Key)
+	}
+	if !bytes.Equal(got.Value, e.Value) {
+		t.Fatalf("value mismatch: got %q want %q", got.Value, e.Value)
+	}
+	if got.Timestamp != e.Timestamp {
+		t.Fatalf("timestamp mismatch: got %d want %d", got.Timestamp, e.Timestamp)
+	}
+	if got.Checksum != e.Checksum {
+		t.Fatalf("checksum mismatch: got %d want %d", got.Checksum, e.Checksum)
+	}
+	if got.Tombstone != e.Tombstone {
+		t.Fatalf("tombstone mismatch: got %v want %v", got.Tombstone, e.Tombstone)
+	}
+}
+
+func TestReadFromReturnsEOFForEmptyReader(t *testing.T) {
+	var buf bytes.Buffer
+
+	_, err := ReadFrom(&buf)
+	if err != io.EOF {
+		t.Fatalf("expected EOF, got %v", err)
 	}
 }
 
