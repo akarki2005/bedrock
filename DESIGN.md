@@ -29,6 +29,84 @@ the key is considered absent regardless of whether it previously existed
 
 ## API Design
 
+### `Open(path string) (*Engine, error)`
+
+Opens an existing database at the given filesystem path or creates a new one if none exists.
+
+Behaviour:
+
+- Initializes in-memory state
+- Opens/creates the WAL
+- Loads existing SSTables from disk
+- Replays WAL records needed for crash recovery
+- Returns a ready-to-use database handle
+
+Error if:
+
+- Path is invalid
+- Required files cannot be opened
+- On-disk state is corrupted
+- WAL recovery fails
+
+### `Put(key, value []byte) error`
+
+Inserts a new key-value pair or overwrites the existing value for that key.
+
+Behaviour:
+
+- Appends the write to the WAL before acknowledging success
+- Updates the memtable *after* the WAL append succeeds
+- Uses last-write-wins semantics
+- If `Put` returns `nil`, the write is durable and can survive process crash
+
+Error if:
+
+- Key is invalid
+- Database is closed
+- WAL append or sync fails
+
+### `Get(key []byte) ([]byte, error)`
+
+Returns the most recent value associated with the key.
+
+Behaviour:
+
+- Searches active memtable first, then checks immutable/flushing memtable, then finally searches SSTables from newest to oldest
+- If newest visible record is a tombstone, return not found
+
+### `Delete(key []byte) error`
+
+Logically removes a key by recording a tombstone.
+
+Behaviour:
+
+- Appends a tombstone record to the WAL before acknowledging success
+- Updates the memtable with the tombstone *after* WAL append succeeds
+- Does not physically remove older values immediately
+- Is idempotent
+- If `Delete` returns `nil`, future reads should treat the key as absent, and that delete must survive a process crash
+
+Error if:
+
+- key is invalid
+- Database is closed
+- WAL append or sync fails
+
+### `Close() error`
+
+Shuts down the database and releases resources.
+
+Behaviour:
+
+- Prevents new operations from being accepted
+- Flushes or finalizes any state required for a clean shutdown
+- Closes open file handles
+
+Error if:
+
+- Pending state cannot be finalized correctly
+- Files cannot be closed cleanly
+
 ## Core Components
 
 ## High-Level Architecture
