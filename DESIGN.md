@@ -7,7 +7,7 @@
 - Support `Delete(key)` to logically remove a key so that subsequent reads return not found
 - `Delete(key)` is idempotent; after it succeeds, 
 the key is considered absent regardless of whether it previously existed
-- Use last-write-wins semantics, so the most recent `Put` or `Delete`
+- Use last-write-wins semantics, so the most recent `Put` or `Delete` for a key `k` determines the value returned by subsequent `Get(k)` operations
 - Return not found when reading a key that has never existed or been deleted
 - Guarantee durability for acknowledged writes: once `Put` or `Delete` returns success, the update must survive process crashes and be recoverable on restart.
 - Recover database state on startup by replaying persisted write-ahead log records that were not yet flushed to disk tables.
@@ -25,7 +25,7 @@ the key is considered absent regardless of whether it previously existed
 - The engine should provide relatively low latency for point reads, but accept read amplification as a tradeoff for better write performance
 - The engine should use memory efficiently
 - The implementation should prioritize simplicity, correctness and maintainability over advanced optimizations
-- The scope is limited to a single-node engine; replication, sharding and fault tolerance at a distributed level are out of scope
+- The scope is limited to a single-node engine; replication, sharding and fault tolerance at a distributed level are all out of scope
 
 ## API Design
 
