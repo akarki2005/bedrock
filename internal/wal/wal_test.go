@@ -159,6 +159,47 @@ func TestReplayWrapsCallbackError(t *testing.T) {
 	}
 }
 
+func TestReplayErrorsOnTruncatedPayload(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wal.log")
+
+	buf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(buf, 10)
+	buf = append(buf, []byte{1, 2, 3}...)
+
+	if err := os.WriteFile(path, buf, 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	w, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer w.Close()
+
+	err = w.Replay(func(e *entry.Entry) error { return nil })
+	if err == nil {
+		t.Fatal("expected replay to fail on truncated payload")
+	}
+}
+
+func TestReplayErrorsOnTruncatedLengthPrefix(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wal.log")
+	if err := os.WriteFile(path, []byte{1, 2}, 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	w, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer w.Close()
+
+	err = w.Replay(func(e *entry.Entry) error { return nil })
+	if err == nil {
+		t.Fatal("expected replay to fail on truncated length prefix")
+	}
+}
+
 func TestAppendAfterCloseReturnsErrClosed(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "wal.log")
 
@@ -193,13 +234,8 @@ func TestCloseIdempotency(t *testing.T) {
 		t.Fatalf("Close failed: %v", err)
 	}
 
-	err = w.Append(entry.New([]byte("auston"), []byte("matthews")))
-	if err == nil {
-		t.Fatal("expected append after close to fail")
-	}
-
-	if !errors.Is(err, ErrClosed) {
-		t.Fatalf("expected ErrClosed, got %v", err)
+	if err := w.Close(); err != nil {
+		t.Fatalf("second close should not be harmful: %v", err)
 	}
 }
 
