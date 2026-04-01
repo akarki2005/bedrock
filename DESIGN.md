@@ -109,6 +109,30 @@ Error if:
 
 ## Core Components
 
+The engine's intended v1 architecture consists of 5 main components: the Engine, the WAL, the memtable, and SSTables.
+
+### Engine
+
+The Engine, living in `engine.go`, is the top-level coordinator and public API entry point. It exposes operations such as `Open`, `Put`, `Get`, `Delete` and `Close`, and is responsible for coordinating interactions between the WAL, memtable, and on-disk SSTables. It enforces lifecycle constraints (e.g. preventing operations on a closed database) and defines overall read and write flows.
+
+### Write-Ahead Log (WAL)
+
+The WAL provides durability for all acknowledged writes. Each `Put` and `Delete` operation is appended to the WAL before being applied to the memtable. 
+
+The WAL is append-only and uses sequential disk I/O. On startup, it is replayed to recover updates that were acknowledged but not yet flushed to disk tables, ensuring crash recovery.
+
+### MemTable
+
+The memtable is the active in-memory data structure that stores the most recent updates. It supports efficient point lookups and maintains last-write-wins semantics. 
+
+Deletes are represented as tombstone entries rather than removing data in-place. Reads consult the memtable first, as it contains the most recent state.
+
+### SSTables
+
+SSTables are immutable on-disk tables created from memtable data. They allow the engine to persist data beyond memory limits and support datasets larger than RAM.
+
+In the current implementation, SSTables are written using sequential I/O. Reads search SSTables from newest to oldest to locate the most recent version of a key.
+
 ## High-Level Architecture
 
 ## Deep Dive
