@@ -135,6 +135,28 @@ In the current implementation, SSTables are written using sequential I/O. Reads 
 
 ## High-Level Architecture
 
+The architecture follows a standard write-optimized LSM design that is built around the aforementioned core components. The engine is the top-level coordinator and API entry point. The WAL provides durability for all acknowledged writes. The memtable stores recent updates in memory for fast access, and SSTables provide immutable on-disk storage so the engine can support datasets larger than available memory. Together, these components seperate the system into a fast write path, a slower, layered read path, and a background persistence path.
+
+### Write Path
+
+All writes enter the system through the Engine. For both `Put` and `Delete`, the Engine first appends the update to the WAL before acknowledging success to the caller. This ordering is critical for durability: once the WAL append and sync succeed, the write can survive a process crash. After the WAL write succeeds, the Engine applies the update to the active memtable. A `Put` inserts or overwrites the key with a new value, while a `Delete` inserts a tombstone entry that logically marks the key as absent without physically removing older versions from storage. This design preserves last-write-wins semantics while keeping the write path append-only and thus sequential on disk.
+
+As the memtable grows large, it eventually reaches a configured size threshold. At that point, the active memtable is frozen and becomes immutable - it is now waiting to be flushed to disk. A fresh memtable is created in the meantime to continue accepting new writes. This handoff prevents foreground writes from being blocked by disk persistence work. In the background, the immutable memtable is flushed to a new SSTable on disk. Because SSTables are written sequentially and never modified in place, the system avoids random disk writes and maintains its write-optimized design.
+
+### Read Path
+
+Reads also enter through the Engine and follow a layered lookup path from newest state to oldest state. The engine first checks the active mutable memtable, since it contains the most recent in-memory updates. If the key is not found there, the Engine checks the immutable/flushing memtable, if one exists. If the key is still not found, the Engine searches SSTables from newest to oldest. This lookup order ensures that the first visible version of a key is the correct one under last-write-wins semantics.
+
+Tombstones are respected throughout the entire read path. If the newest visible record for a key is a tombstone, the read returns not found, even if older SSTables still contain previous values for that key. This allows deletes to remain logical and append-only while still producing correct results. The cost of this design is some read amplification, since a lookup may need to check multiple layers before concluding whether a key exists, but this is an intentional tradeoff in favour of higher write throughput and simpler persistence.
+
+### Recovery Path
+
+When the database is opened, the Engine intitializes in-memory state, opens or creates the WAL, loads any existing SSTables from disk, and replays WAL records needed for crash recovery. WAL replay restores updates that were acknowledged but not yet flushed to disk tables before the previous process terminated. This ensures that acknowledged writes are not lost even if a crash occurs after the WAL write but before memtable contents have been persisted as an SSTable. Once recovery completes, the Engine returns a ready-to-use database handle.
+
+### Architectural Summary
+
+At a high level, the system seperates responsibilites cleanly across storage layers. The WAL guarantees durability, the memtable absorbs recent writes and serves the freshest in-memory state, immutable memtables enable non-blocking background flushes, and SSTables provide scalable persistent storage on disk. The result is a single-node storage engine that favors sequential I/O, high write throughput, and crash recovery correctness, while accepting read amplification as a tradeoff.
+
 ## Deep Dive
 
 ## Tradeoffs
