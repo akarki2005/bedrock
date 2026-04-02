@@ -154,3 +154,54 @@ func TestRotateMemtable(t *testing.T) {
 		t.Fatalf("immutable value = %q, want %q", got.Value, value)
 	}
 }
+
+func TestGetTombstoneInMutableMasksImmutable(t *testing.T) {
+	e := &Engine{
+		mutable:   memtable.New(),
+		immutable: memtable.New(),
+	}
+
+	key := []byte("cupertino")
+	value := []byte("california")
+
+	if err := e.immutable.Put(entry.New(key, value)); err != nil {
+		t.Fatalf("put immutable: %v", err)
+	}
+
+	if err := e.mutable.Put(entry.NewTombstone(key)); err != nil {
+		t.Fatalf("put tombstone in mutable: %v", err)
+	}
+
+	got, ok, err := e.Get(key)
+	if err != nil {
+		t.Fatalf("get %q: %v", key, err)
+	}
+	if ok {
+		t.Fatalf("expected key %q to be deleted, got value %q", key, got)
+	}
+}
+
+func TestGetReturnsValueFromImmutable(t *testing.T) {
+	e := &Engine{
+		mutable:   memtable.New(),
+		immutable: memtable.New(),
+	}
+
+	key := []byte("city")
+	value := []byte("toronto")
+
+	if err := e.immutable.Put(entry.New(key, value)); err != nil {
+		t.Fatalf("put immutable: %v", err)
+	}
+
+	got, ok, err := e.Get(key)
+	if err != nil {
+		t.Fatalf("get %q: %v", key, err)
+	}
+	if !ok {
+		t.Fatalf("expected key %q to exist in immutable memtable", key)
+	}
+	if !bytes.Equal(got, value) {
+		t.Fatalf("value = %q, want %q", got, value)
+	}
+}
