@@ -177,3 +177,33 @@ At a high level, the system seperates responsibilites cleanly across storage lay
 - Adds additional overhead latency to each write
 
 ## Future Improvements
+
+### Compaction Engine
+
+- Merge SSTables, remove stale entries and tombstones
+- Reduces both read and space amplification
+
+### Bloom Filters
+
+- Quickly determine whether or not a key is absent in an SSTable
+- Avoid unnecessary disk reads
+
+### Sparse Indexes
+
+- Enable faster lookups within SSTables
+- Reduce the need for full scans
+
+### Atomic SSTable 
+
+- Use a temporary file + rename
+- Prevent partial/corrupt table states
+
+### Async/Batched WAL Sync
+
+- Group multiple writes into one fsync call
+- Improve write throughput through amortization
+
+### Range Scans
+
+- Merge results across MemTable and SSTables
+- Enable order traversal of keys
