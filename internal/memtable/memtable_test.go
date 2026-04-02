@@ -20,8 +20,8 @@ func TestNewInitializesEmptyMemTable(t *testing.T) {
 	if mt.level != 1 {
 		t.Fatalf("initial level mismatch: got %d want %d", mt.level, 1)
 	}
-	if mt.size != 0 {
-		t.Fatalf("initial size mismatch: got %d want %d", mt.size, 0)
+	if mt.count != 0 {
+		t.Fatalf("initial size mismatch: got %d want %d", mt.count, 0)
 	}
 	if len(mt.head.successor) != maxLevel {
 		t.Fatalf("head successor length mismatch: got %d want %d", len(mt.head.successor), maxLevel)

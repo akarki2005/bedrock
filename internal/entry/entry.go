@@ -200,3 +200,10 @@ func (e *Entry) calculateChecksum() uint32 {
 
 	return crc32.ChecksumIEEE(buffer)
 }
+
+func (e *Entry) Size() int {
+	if e == nil {
+		return 0
+	}
+	return HeaderSize + len(e.Key) + len(e.Value)
+}

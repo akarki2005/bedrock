@@ -24,7 +24,8 @@ type MemTable struct {
 	mu    sync.RWMutex
 	head  *node
 	level int
-	size  int
+	count int
+	bytes int
 	rng   *rand.Rand
 }
 
@@ -42,7 +43,7 @@ func (m *MemTable) Len() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	return m.size
+	return m.count
 }
 
 func (m *MemTable) Put(e *entry.Entry) error {
@@ -59,7 +60,9 @@ func (m *MemTable) Put(e *entry.Entry) error {
 	predecessor, curr := m.find(e.Key)
 
 	if curr != nil && bytes.Equal(curr.entry.Key, e.Key) {
+		m.bytes -= curr.entry.Size()
 		curr.entry = entry.CloneEntry(e)
+		m.bytes += curr.entry.Size()
 		return nil
 	}
 
@@ -81,7 +84,8 @@ func (m *MemTable) Put(e *entry.Entry) error {
 		predecessor[i].successor[i] = n
 	}
 
-	m.size++
+	m.count++
+	m.bytes += n.entry.Size()
 	return nil
 }
 
@@ -115,6 +119,13 @@ func (m *MemTable) Scan(fn func(*entry.Entry) error) error {
 	}
 
 	return nil
+}
+
+func (m *MemTable) Bytes() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.bytes
 }
 
 func (m *MemTable) find(key []byte) ([maxLevel]*node, *node) {

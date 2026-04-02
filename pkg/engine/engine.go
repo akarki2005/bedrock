@@ -8,9 +8,13 @@ import (
 	"github.com/akarki2005/lsm-engine/internal/wal"
 )
 
+const defaultFlushThreshold = 4 << 20
+
 type Engine struct {
-	wal      *wal.WAL
-	memtable *memtable.MemTable
+	wal            *wal.WAL
+	mutable        *memtable.MemTable
+	immutable      *memtable.MemTable
+	flushThreshold int
 }
 
 func Open(path string) (*Engine, error) {
@@ -27,8 +31,9 @@ func Open(path string) (*Engine, error) {
 	}
 
 	return &Engine{
-		wal:      wal,
-		memtable: mt,
+		wal:            wal,
+		mutable:        mt,
+		flushThreshold: defaultFlushThreshold,
 	}, nil
 }
 
@@ -39,22 +44,37 @@ func (e *Engine) Put(key, value []byte) error {
 		return fmt.Errorf("append to WAL: %w", err)
 	}
 
-	if err := e.memtable.Put(ent); err != nil {
+	if err := e.mutable.Put(ent); err != nil {
 		return fmt.Errorf("put into memtable: %w", err)
+	}
+
+	if e.mutable.Bytes() >= e.flushThreshold {
+		if err := e.rotateMemTable(); err != nil {
+			return fmt.Errorf("rotate memtable: %w", err)
+		}
 	}
 
 	return nil
 }
 
 func (e *Engine) Get(key []byte) ([]byte, bool, error) {
-	ent, ok := e.memtable.Get(key)
-
-	if !ok || ent.Tombstone {
-		return nil, false, nil
+	if ent, ok := e.mutable.Get(key); ok {
+		if ent.Tombstone {
+			return nil, false, nil
+		}
+		return append([]byte(nil), ent.Value...), true, nil
 	}
 
-	value := append([]byte(nil), ent.Value...)
-	return value, true, nil
+	if e.immutable != nil {
+		if ent, ok := e.immutable.Get(key); ok {
+			if ent.Tombstone {
+				return nil, false, nil
+			}
+			return append([]byte(nil), ent.Value...), true, nil
+		}
+	}
+
+	return nil, false, nil
 }
 
 func (e *Engine) Delete(key []byte) error {
@@ -64,8 +84,14 @@ func (e *Engine) Delete(key []byte) error {
 		return fmt.Errorf("append tombstone to WAL: %w", err)
 	}
 
-	if err := e.memtable.Put(entry); err != nil {
+	if err := e.mutable.Put(entry); err != nil {
 		return fmt.Errorf("put tombstone into memtable: %w", err)
+	}
+
+	if e.mutable.Bytes() >= e.flushThreshold {
+		if err := e.rotateMemTable(); err != nil {
+			return fmt.Errorf("rotate memtable: %w", err)
+		}
 	}
 
 	return nil
@@ -75,5 +101,16 @@ func (e *Engine) Close() error {
 	if err := e.wal.Close(); err != nil {
 		return fmt.Errorf("close WAL: %w", err)
 	}
+	return nil
+}
+
+func (e *Engine) rotateMemTable() error {
+	if e.immutable != nil {
+		return fmt.Errorf("immutable memtable already exists")
+	}
+
+	e.immutable = e.mutable
+	e.mutable = memtable.New()
+
 	return nil
 }
