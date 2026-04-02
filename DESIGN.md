@@ -161,4 +161,19 @@ At a high level, the system seperates responsibilites cleanly across storage lay
 
 ## Tradeoffs
 
+### Write Optimization vs Read Amplification
+
+- Optimized for sequential writes (WAL + MemTable) -> low write latency and high write throughput
+- Reads may check multiple structures (MemTable + SSTables) -> higher read latency & amplification
+
+### Append-Only Design vs Storage Overhead
+
+- No in-place updates -> avoids random I/O
+- Old versions + tombstones accumulate -> higher disk utilization
+
+### Durability vs Latency
+
+- WAL fsync before acknowledgement -> strong durability guarantees
+- Adds additional overhead latency to each write
+
 ## Future Improvements
