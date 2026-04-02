@@ -202,3 +202,59 @@ func TestPutGetPreservesTombstone(t *testing.T) {
 		t.Fatal("expected tombstone to be preserved")
 	}
 }
+
+func TestBytesIsZeroForNewMemtable(t *testing.T) {
+	m := New()
+
+	if m.bytes != 0 {
+		t.Fatalf("new memtable has non-zero bytes.")
+	}
+}
+
+func TestPutNewKeyIncreasesCountAndBytes(t *testing.T) {
+	m := New()
+
+	e := entry.New([]byte("san"), []byte("francisco"))
+	if err := m.Put(e); err != nil {
+		t.Fatalf("put failed: %v", err)
+	}
+
+	if got, want := m.Len(), 1; got != want {
+		t.Fatalf("len = %d, want %d", got, want)
+	}
+
+	if got, want := m.Bytes(), e.Size(); got != want {
+		t.Fatalf("bytes = %d, want %d", got, want)
+	}
+
+}
+
+func TestPutOverwritePreservesLenUpdatesBytes(t *testing.T) {
+	m := New()
+
+	e := entry.New([]byte("new"), []byte("york"))
+	if err := m.Put(e); err != nil {
+		t.Fatalf("put failed: %v", err)
+	}
+
+	if got, want := m.Len(), 1; got != want {
+		t.Fatalf("len = %d, want %d", got, want)
+	}
+
+	if got, want := m.Bytes(), e.Size(); got != want {
+		t.Fatalf("bytes = %d, want %d", got, want)
+	}
+
+	e = entry.New([]byte("new"), []byte("england"))
+	if err := m.Put(e); err != nil {
+		t.Fatalf("second put failed: %v", err)
+	}
+
+	if got, want := m.Len(), 1; got != want {
+		t.Fatalf("len = %d, want %d", got, want)
+	}
+
+	if got, want := m.Bytes(), e.Size(); got != want {
+		t.Fatalf("bytes = %d, want %d", got, want)
+	}
+}
