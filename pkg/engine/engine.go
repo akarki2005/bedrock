@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/akarki2005/lsm-engine/internal/entry"
@@ -209,6 +210,8 @@ func loadSSTables(dir string) ([]*sstable.SSTable, error) {
 
 		names = append(names, name)
 	}
+
+	sort.Strings(names)
 
 	// go in reverse order so newest SSTables come first
 	tables := make([]*sstable.SSTable, 0, len(names))
