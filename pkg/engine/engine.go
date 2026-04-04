@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/akarki2005/lsm-engine/internal/entry"
 	"github.com/akarki2005/lsm-engine/internal/memtable"
@@ -16,12 +17,17 @@ import (
 const defaultFlushThreshold = 4 << 20
 
 type Engine struct {
+	mu             sync.RWMutex
 	dir            string
 	wal            *wal.WAL
+	walImmutable   *wal.WAL
 	mutable        *memtable.MemTable
 	immutable      *memtable.MemTable
 	sstables       []*sstable.SSTable
 	flushThreshold int
+	walID          int
+	walImmutableID int
+	nextSSTableID  int
 }
 
 func Open(path string) (*Engine, error) {
@@ -34,8 +40,7 @@ func Open(path string) (*Engine, error) {
 		return nil, fmt.Errorf("load SSTables: %w", err)
 	}
 
-	walPath := filepath.Join(path, "wal.log")
-	wal, err := wal.Open(walPath)
+	wal, walID, err := loadActiveWAL(path)
 	if err != nil {
 		return nil, fmt.Errorf("open WAL: %w", err)
 	}
@@ -50,6 +55,7 @@ func Open(path string) (*Engine, error) {
 	return &Engine{
 		dir:            path,
 		wal:            wal,
+		walID:          walID,
 		mutable:        mt,
 		sstables:       tables,
 		flushThreshold: defaultFlushThreshold,
@@ -57,6 +63,9 @@ func Open(path string) (*Engine, error) {
 }
 
 func (e *Engine) Put(key, value []byte) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	ent := entry.New(key, value)
 
 	if err := e.wal.Append(ent); err != nil {
@@ -81,6 +90,9 @@ func (e *Engine) Put(key, value []byte) error {
 }
 
 func (e *Engine) Get(key []byte) ([]byte, bool, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
 	if ent, ok := e.mutable.Get(key); ok {
 		if ent.Tombstone {
 			return nil, false, nil
@@ -114,6 +126,9 @@ func (e *Engine) Get(key []byte) ([]byte, bool, error) {
 }
 
 func (e *Engine) Delete(key []byte) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	entry := entry.NewTombstone(key)
 
 	if err := e.wal.Append(entry); err != nil {
@@ -150,7 +165,18 @@ func (e *Engine) rotateMemTable() error {
 	}
 
 	e.immutable = e.mutable
+	e.walImmutable = e.wal
+	e.walImmutableID = e.walID
+
 	e.mutable = memtable.New()
+
+	id, walPath := e.nextWALPath()
+	w, err := wal.Open(walPath)
+	if err != nil {
+		return fmt.Errorf("Open WAL: %w", err)
+	}
+	e.wal = w
+	e.walID = id
 
 	return nil
 }
@@ -160,7 +186,7 @@ func (e *Engine) flushImmutable() error {
 		return nil
 	}
 
-	finalPath := e.nextSSTablePath()
+	id, finalPath := e.nextSSTablePath()
 	tempPath := finalPath + ".tmp"
 
 	err := sstable.CreateFromMemTable(tempPath, e.immutable)
@@ -180,14 +206,34 @@ func (e *Engine) flushImmutable() error {
 		return fmt.Errorf("open flushed SSTABLE: %w", err)
 	}
 
+	if err := e.walImmutable.Close(); err != nil {
+		return fmt.Errorf("Close WAL: %w", err)
+	}
+
+	oldPath := filepath.Join(e.dir, fmt.Sprintf("wal-%03d.log", e.walImmutableID))
+	if err := os.Remove(oldPath); err != nil {
+		return fmt.Errorf("remove immutable WAL: %w", err)
+	}
+
+	e.walImmutable = nil
+
 	e.sstables = append([]*sstable.SSTable{table}, e.sstables...)
 	e.immutable = nil
+	e.nextSSTableID = id
 
 	return nil
 }
 
-func (e *Engine) nextSSTablePath() string {
-	return filepath.Join(e.dir, fmt.Sprintf("sst-%03d.db", len(e.sstables)+1))
+func (e *Engine) nextSSTablePath() (int, string) {
+	id := e.nextSSTableID + 1
+	path := filepath.Join(e.dir, fmt.Sprintf("sst-%03d.db", id))
+	return id, path
+}
+
+func (e *Engine) nextWALPath() (int, string) {
+	id := e.walID + 1
+	path := filepath.Join(e.dir, fmt.Sprintf("wal-%03d.log", id))
+	return id, path
 }
 
 func loadSSTables(dir string) ([]*sstable.SSTable, error) {
@@ -227,4 +273,46 @@ func loadSSTables(dir string) ([]*sstable.SSTable, error) {
 	}
 
 	return tables, nil
+}
+
+func loadActiveWAL(dir string) (*wal.WAL, int, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, 0, fmt.Errorf("read engine dir: %w", err)
+	}
+
+	maxID := -1
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if !strings.HasPrefix(name, "wal-") || !strings.HasSuffix(name, ".log") {
+			continue
+		}
+
+		var id int
+		_, err := fmt.Sscanf(name, "wal-%03d.log", &id)
+		if err != nil {
+			return nil, 0, fmt.Errorf("parse WAL filename %q: %w", name, err)
+		}
+
+		if id > maxID {
+			maxID = id
+		}
+	}
+
+	if maxID == -1 {
+		maxID = 1
+	}
+
+	path := filepath.Join(dir, fmt.Sprintf("wal-%03d.log", maxID))
+	wal, err := wal.Open(path)
+	if err != nil {
+		return nil, 0, fmt.Errorf("open active WAL: %w", err)
+	}
+
+	return wal, maxID, nil
 }
