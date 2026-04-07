@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/akarki2005/lsm-engine/internal/compaction"
 	"github.com/akarki2005/lsm-engine/internal/entry"
 	"github.com/akarki2005/lsm-engine/internal/memtable"
 	"github.com/akarki2005/lsm-engine/internal/sstable"
@@ -234,6 +235,18 @@ func (e *Engine) nextWALPath() (int, string) {
 	id := e.walID + 1
 	path := filepath.Join(e.dir, fmt.Sprintf("wal-%03d.log", id))
 	return id, path
+}
+
+func (e *Engine) compactLevel(level int) error {
+	return nil
+}
+
+func (e *Engine) planCompaction(level int) (*compaction.Plan, error) {
+	return nil, nil
+}
+
+func (e *Engine) applyCompaction(plan *compaction.Plan, outputs []*sstable.SSTable) error {
+	return nil
 }
 
 func loadSSTables(dir string) ([]*sstable.SSTable, error) {
