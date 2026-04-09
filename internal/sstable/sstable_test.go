@@ -140,6 +140,20 @@ func TestOpenDirPath(t *testing.T) {
 	}
 }
 
+func TestOpenCorruptFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "table.sst")
+
+	if err := os.WriteFile(path, []byte{1, 2, 3}, 0644); err != nil {
+		t.Fatalf("write corrupt file: %v", err)
+	}
+
+	_, err := Open(path)
+	if err == nil {
+		t.Fatalf("expected error for corrupt file")
+	}
+}
+
 func TestScanEmptyFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "table.sst")
@@ -349,31 +363,5 @@ func TestGetNotFound(t *testing.T) {
 	}
 	if got != nil {
 		t.Fatalf("expected nil entry for missing key")
-	}
-}
-
-func TestGetCorruptFile(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "table.sst")
-
-	if err := os.WriteFile(path, []byte{1, 2, 3}, 0644); err != nil {
-		t.Fatalf("write corrupt file: %v", err)
-	}
-
-	s, err := Open(path)
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-
-	key := "apple"
-	got, ok, err := s.Get([]byte(key))
-	if err == nil {
-		t.Fatalf("expected error for corrupt file")
-	}
-	if ok {
-		t.Fatalf("expected ok=false for corrupt file")
-	}
-	if got != nil {
-		t.Fatalf("expected nil entry for corrupt file")
 	}
 }
