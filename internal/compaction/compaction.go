@@ -1,6 +1,8 @@
 package compaction
 
 import (
+	"bytes"
+
 	"github.com/akarki2005/lsm-engine/internal/entry"
 	"github.com/akarki2005/lsm-engine/internal/sstable"
 )
@@ -11,7 +13,7 @@ type Plan struct {
 	overlaps []*sstable.SSTable
 }
 
-func New(level int, inputs, overlaps []*sstable.SSTable) *Plan {
+func NewPlan(level int, inputs, overlaps []*sstable.SSTable) *Plan {
 	return &Plan{
 		level:    level,
 		inputs:   inputs,
@@ -28,7 +30,7 @@ func Run(plan *Plan, dir string) ([]*sstable.SSTable, error) {
 }
 
 func overlaps(a, b *sstable.SSTable) bool {
-	return false
+	return !(bytes.Compare(a.MaxKey(), b.MinKey()) < 0 || bytes.Compare(b.MaxKey(), a.MinKey()) < 0)
 }
 
 func mergeEntries(inputs []*sstable.SSTable, overlaps []*sstable.SSTable) ([]*entry.Entry, error) {

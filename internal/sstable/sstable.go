@@ -12,7 +12,9 @@ import (
 )
 
 type SSTable struct {
-	path string
+	path   string
+	minKey []byte
+	maxKey []byte
 }
 
 func CreateFromMemTable(path string, m *memtable.MemTable) error {
@@ -64,29 +66,25 @@ func Open(path string) (*SSTable, error) {
 		return nil, errors.New("sstable path points to a directory")
 	}
 
-	return &SSTable{path: path}, nil
+	s := &SSTable{path: path}
+
+	first := true
+	if err := s.scanFile(func(e *entry.Entry) error {
+		if first {
+			s.minKey = append([]byte(nil), e.Key...)
+			first = false
+		}
+		s.maxKey = append([]byte(nil), e.Key...)
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("load sstable metadata: %w", err)
+	}
+
+	return s, nil
 }
 
 func (s *SSTable) Scan(fn func(*entry.Entry) error) error {
-	file, err := os.Open(s.path)
-	if err != nil {
-		return fmt.Errorf("open sstable: %w", err)
-	}
-	defer file.Close()
-
-	for {
-		e, err := entry.ReadFrom(file)
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("read entry: %w", err)
-		}
-
-		if err := fn(e); err != nil {
-			return err
-		}
-	}
+	return s.scanFile(fn)
 }
 
 func (s *SSTable) Get(key []byte) (*entry.Entry, bool, error) {
@@ -112,6 +110,36 @@ func (s *SSTable) Get(key []byte) (*entry.Entry, bool, error) {
 		}
 		if cmp > 0 { // we're past the point where we'd have seen the key
 			return nil, false, nil
+		}
+	}
+}
+
+func (s *SSTable) MinKey() []byte {
+	return append([]byte(nil), s.minKey...)
+}
+
+func (s *SSTable) MaxKey() []byte {
+	return append([]byte(nil), s.maxKey...)
+}
+
+func (s *SSTable) scanFile(fn func(*entry.Entry) error) error {
+	file, err := os.Open(s.path)
+	if err != nil {
+		return fmt.Errorf("open sstable: %w", err)
+	}
+	defer file.Close()
+
+	for {
+		e, err := entry.ReadFrom(file)
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read entry: %w", err)
+		}
+
+		if err := fn(e); err != nil {
+			return err
 		}
 	}
 }
