@@ -49,6 +49,7 @@ func overlaps(a, b *sstable.SSTable) bool {
 	return !(bytes.Compare(a.MaxKey(), b.MinKey()) < 0 || bytes.Compare(b.MaxKey(), a.MinKey()) < 0)
 }
 
+// https://leetcode.com/problems/merge-k-sorted-lists/
 func mergeEntries(inputs []*sstable.SSTable, overlaps []*sstable.SSTable) ([]*entry.Entry, error) {
 	allTables := make([]*sstable.SSTable, 0, len(inputs)+len(overlaps))
 	allTables = append(allTables, inputs...)
@@ -60,7 +61,12 @@ func mergeEntries(inputs []*sstable.SSTable, overlaps []*sstable.SSTable) ([]*en
 
 	tableEntries := make([][]*entry.Entry, len(allTables))
 	for i, table := range allTables {
-		entries, err := readAllEntries(table)
+		entries := make([]*entry.Entry, 0)
+
+		err := table.Scan(func(e *entry.Entry) error {
+			entries = append(entries, entry.CloneEntry(e))
+			return nil
+		})
 		if err != nil {
 			return nil, err
 		}
