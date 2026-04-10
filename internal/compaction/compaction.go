@@ -9,6 +9,9 @@ import (
 	"github.com/akarki2005/lsm-engine/internal/sstable"
 )
 
+const baseSSTableSizeBytes = 1 << 20
+const maxSSTableSizeBytes = 16 << 20
+
 type Plan struct {
 	level    int
 	inputs   []*sstable.SSTable
@@ -27,7 +30,7 @@ func (p *Plan) Level() int                   { return p.level }
 func (p *Plan) Inputs() []*sstable.SSTable   { return p.inputs }
 func (p *Plan) Overlaps() []*sstable.SSTable { return p.overlaps }
 
-func Run(plan *Plan, dir string) ([]*sstable.SSTable, error) {
+func Run(plan *Plan) ([][]*entry.Entry, error) {
 	if plan == nil {
 		return nil, errors.New("nil compaction plan")
 	}
@@ -37,16 +40,7 @@ func Run(plan *Plan, dir string) ([]*sstable.SSTable, error) {
 		return nil, fmt.Errorf("merge entries: %w", err)
 	}
 
-	outputs, err := writeOutputs(dir, entries)
-	if err != nil {
-		return nil, fmt.Errorf("write outputs: %w", err)
-	}
-
-	return outputs, nil
-}
-
-func overlaps(a, b *sstable.SSTable) bool {
-	return !(bytes.Compare(a.MaxKey(), b.MinKey()) < 0 || bytes.Compare(b.MaxKey(), a.MinKey()) < 0)
+	return splitOutputs(plan.level+1, entries), nil
 }
 
 // https://leetcode.com/problems/merge-k-sorted-lists/
@@ -124,6 +118,44 @@ func mergeEntries(inputs []*sstable.SSTable, overlaps []*sstable.SSTable) ([]*en
 	return merged, nil
 }
 
-func writeOutputs(dir string, entries []*entry.Entry) ([]*sstable.SSTable, error) {
-	return nil, nil
+func splitOutputs(level int, entries []*entry.Entry) [][]*entry.Entry {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	targetSize := targetOutputFileSize(level)
+
+	var chunks [][]*entry.Entry
+	var chunk []*entry.Entry
+	chunkSize := 0
+
+	for _, e := range entries {
+		entrySize := e.Size()
+
+		if len(chunk) > 0 && chunkSize+entrySize > targetSize {
+			chunks = append(chunks, chunk)
+			chunk = nil
+			chunkSize = 0
+		}
+
+		chunk = append(chunk, e)
+		chunkSize += entrySize
+	}
+
+	if len(chunk) > 0 {
+		chunks = append(chunks, chunk)
+	}
+
+	return chunks
+}
+
+func targetOutputFileSize(level int) int {
+
+	size := baseSSTableSizeBytes << level
+
+	if size > maxSSTableSizeBytes {
+		return maxSSTableSizeBytes
+	}
+
+	return size
 }
