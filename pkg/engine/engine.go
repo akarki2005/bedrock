@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,11 +25,17 @@ type Engine struct {
 	walImmutable   *wal.WAL
 	mutable        *memtable.MemTable
 	immutable      *memtable.MemTable
-	sstables       []*sstable.SSTable
+	sstables       [][]*sstable.SSTable
 	flushThreshold int
 	walID          int
 	walImmutableID int
 	nextSSTableID  int
+}
+
+type sstableFile struct {
+	level int
+	id    int
+	name  string
 }
 
 func Open(path string) (*Engine, error) {
@@ -36,7 +43,7 @@ func Open(path string) (*Engine, error) {
 		return nil, fmt.Errorf("create engine dir: %w", err)
 	}
 
-	tables, err := loadSSTables(path)
+	tables, maxID, err := loadSSTables(path)
 	if err != nil {
 		return nil, fmt.Errorf("load SSTables: %w", err)
 	}
@@ -60,6 +67,7 @@ func Open(path string) (*Engine, error) {
 		mutable:        mt,
 		sstables:       tables,
 		flushThreshold: defaultFlushThreshold,
+		nextSSTableID:  maxID,
 	}, nil
 }
 
@@ -110,16 +118,18 @@ func (e *Engine) Get(key []byte) ([]byte, bool, error) {
 		}
 	}
 
-	for _, table := range e.sstables {
-		ent, ok, err := table.Get(key)
-		if err != nil {
-			return nil, false, fmt.Errorf("get from SSTable: %w", err)
-		}
-		if ok {
-			if ent.Tombstone {
-				return nil, false, nil
+	for level, _ := range e.sstables {
+		for _, table := range e.sstables[level] {
+			ent, ok, err := table.Get(key)
+			if err != nil {
+				return nil, false, fmt.Errorf("get from SSTable: %w", err)
 			}
-			return append([]byte(nil), ent.Value...), true, nil
+			if ok {
+				if ent.Tombstone {
+					return nil, false, nil
+				}
+				return append([]byte(nil), ent.Value...), true, nil
+			}
 		}
 	}
 
@@ -187,7 +197,7 @@ func (e *Engine) flushImmutable() error {
 		return nil
 	}
 
-	id, finalPath := e.nextSSTablePath()
+	id, finalPath := e.nextSSTablePath(0)
 	tempPath := finalPath + ".tmp"
 
 	err := sstable.CreateFromMemTable(tempPath, e.immutable)
@@ -218,16 +228,17 @@ func (e *Engine) flushImmutable() error {
 
 	e.walImmutable = nil
 
-	e.sstables = append([]*sstable.SSTable{table}, e.sstables...)
+	e.ensureLevel(0)
+	e.sstables[0] = append([]*sstable.SSTable{table}, e.sstables[0]...)
 	e.immutable = nil
 	e.nextSSTableID = id
 
 	return nil
 }
 
-func (e *Engine) nextSSTablePath() (int, string) {
+func (e *Engine) nextSSTablePath(level int) (int, string) {
 	id := e.nextSSTableID + 1
-	path := filepath.Join(e.dir, fmt.Sprintf("sst-%03d.db", id))
+	path := filepath.Join(e.dir, fmt.Sprintf("l%d-sst-%03d.db", level, id))
 	return id, path
 }
 
@@ -238,6 +249,25 @@ func (e *Engine) nextWALPath() (int, string) {
 }
 
 func (e *Engine) compactLevel(level int) error {
+	plan, err := e.planCompaction(level)
+	if err != nil {
+		return fmt.Errorf("plan compaction: %w", err)
+	}
+
+	chunks, err := compaction.Run(plan)
+	if err != nil {
+		return fmt.Errorf("Run compaction: %w", err)
+	}
+
+	outputs, err := e.writeOutputs(plan.Level()+1, chunks)
+	if err != nil {
+		return fmt.Errorf("write outputs: %w", err)
+	}
+
+	if err := e.applyCompaction(plan, outputs); err != nil {
+		return fmt.Errorf("apply compaction: %w", err)
+	}
+
 	return nil
 }
 
@@ -245,47 +275,78 @@ func (e *Engine) planCompaction(level int) (*compaction.Plan, error) {
 	return nil, nil
 }
 
+func (e *Engine) writeOutputs(level int, chunks [][]*entry.Entry) ([]*sstable.SSTable, error) {
+	return nil, nil
+}
+
 func (e *Engine) applyCompaction(plan *compaction.Plan, outputs []*sstable.SSTable) error {
 	return nil
 }
 
-func loadSSTables(dir string) ([]*sstable.SSTable, error) {
+func (e *Engine) ensureLevel(level int) {
+	for len(e.sstables) <= level {
+		e.sstables = append(e.sstables, nil)
+	}
+}
+
+func loadSSTables(dir string) ([][]*sstable.SSTable, int, error) {
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, fmt.Errorf("Read engine dir: %w", err)
+		return nil, 0, fmt.Errorf("Read engine dir: %w", err)
 	}
 
-	var names []string
+	var files []sstableFile
+	maxLevel := -1
+	maxID := 0
+
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
 
+		var level, id int
 		name := entry.Name()
-		if !strings.HasPrefix(name, "sst-") || !strings.HasSuffix(name, ".db") {
+
+		if _, err := fmt.Sscanf(name, "l%d-sst-%03d.db", &level, &id); err != nil {
 			continue
 		}
 
-		names = append(names, name)
+		files = append(files, sstableFile{
+			level: level,
+			id:    id,
+			name:  name,
+		})
+
+		if level > maxLevel {
+			maxLevel = level
+		}
+		if id > maxID {
+			maxID = id
+		}
 	}
 
-	sort.Strings(names)
+	tables := make([][]*sstable.SSTable, maxLevel+1)
 
-	// go in reverse order so newest SSTables come first
-	tables := make([]*sstable.SSTable, 0, len(names))
-	for i := len(names) - 1; i >= 0; i-- {
-		path := filepath.Join(dir, names[i])
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].level != files[j].level {
+			return files[i].level < files[j].level
+		}
+		return files[i].id > files[j].id
+	})
+
+	for _, f := range files {
+		path := filepath.Join(dir, f.name)
 
 		table, err := sstable.Open(path)
 		if err != nil {
-			return nil, fmt.Errorf("open SSTable: %w", err)
+			return nil, 0, fmt.Errorf("open sstable %q: %w", f.name, err)
 		}
 
-		tables = append(tables, table)
+		tables[f.level] = append(tables[f.level], table)
 	}
 
-	return tables, nil
+	return tables, maxID, nil
 }
 
 func loadActiveWAL(dir string) (*wal.WAL, int, error) {
@@ -328,4 +389,8 @@ func loadActiveWAL(dir string) (*wal.WAL, int, error) {
 	}
 
 	return wal, maxID, nil
+}
+
+func overlaps(a, b *sstable.SSTable) bool {
+	return !(bytes.Compare(a.MaxKey(), b.MinKey()) < 0 || bytes.Compare(b.MaxKey(), a.MinKey()) < 0)
 }
