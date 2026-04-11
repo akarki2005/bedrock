@@ -22,6 +22,21 @@ func CreateFromMemTable(path string, m *memtable.MemTable) error {
 		return errors.New("nil memtable")
 	}
 
+	return create(path, m.Scan)
+}
+
+func CreateFromEntries(path string, entries []*entry.Entry) error {
+	return create(path, func(fn func(*entry.Entry) error) error {
+		for _, e := range entries {
+			if err := fn(e); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func create(path string, scan func(func(*entry.Entry) error) error) error {
 	file, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create file: %w", err)
@@ -35,16 +50,16 @@ func CreateFromMemTable(path string, m *memtable.MemTable) error {
 		}
 	}()
 
-	err = m.Scan(func(e *entry.Entry) error {
+	err = scan(func(e *entry.Entry) error {
 		if err := e.WriteTo(file); err != nil {
 			return fmt.Errorf("write entry to sstable: %w", err)
 		}
 		return nil
 	})
-
 	if err != nil {
-		return fmt.Errorf("flush memtable to sstable: %w", err)
+		return fmt.Errorf("write entries to sstable: %w", err)
 	}
+
 	if err := file.Sync(); err != nil {
 		return fmt.Errorf("sync sstable file: %w", err)
 	}
@@ -81,6 +96,10 @@ func Open(path string) (*SSTable, error) {
 	}
 
 	return s, nil
+}
+
+func (s *SSTable) Path() string {
+	return s.path
 }
 
 func (s *SSTable) Scan(fn func(*entry.Entry) error) error {

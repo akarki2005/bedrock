@@ -272,14 +272,97 @@ func (e *Engine) compactLevel(level int) error {
 }
 
 func (e *Engine) planCompaction(level int) (*compaction.Plan, error) {
-	return nil, nil
+	if level < 0 || level >= len(e.sstables) {
+		return nil, fmt.Errorf("invalid level %d", level)
+	}
+
+	if len(e.sstables[level]) == 0 {
+		return nil, fmt.Errorf("no SSTables at level %d", level)
+	}
+
+	input := e.sstables[level][0]
+	inputs := []*sstable.SSTable{input}
+
+	var overlapTables []*sstable.SSTable
+	if level+1 < len(e.sstables) {
+		for _, table := range e.sstables[level+1] {
+			if overlaps(input, table) {
+				overlapTables = append(overlapTables, table)
+			}
+		}
+	}
+
+	return compaction.NewPlan(level, inputs, overlapTables), nil
 }
 
 func (e *Engine) writeOutputs(level int, chunks [][]*entry.Entry) ([]*sstable.SSTable, error) {
-	return nil, nil
+
+	var outputs []*sstable.SSTable
+	var createdPaths []string
+
+	for _, chunk := range chunks {
+		id, finalPath := e.nextSSTablePath(level)
+		tempPath := finalPath + ".tmp"
+
+		if err := sstable.CreateFromEntries(tempPath, chunk); err != nil {
+			for _, path := range createdPaths {
+				_ = os.Remove(path)
+			}
+			return nil, fmt.Errorf("create output sstable: %w", err)
+		}
+
+		if err := os.Rename(tempPath, finalPath); err != nil {
+			_ = os.Remove(tempPath)
+			for _, path := range createdPaths {
+				_ = os.Remove(path)
+			}
+			return nil, fmt.Errorf("rename output sstable: %w", err)
+		}
+
+		table, err := sstable.Open(finalPath)
+		if err != nil {
+			_ = os.Remove(finalPath)
+			for _, path := range createdPaths {
+				_ = os.Remove(path)
+			}
+			return nil, fmt.Errorf("open output sstable: %w", err)
+		}
+
+		outputs = append(outputs, table)
+		createdPaths = append(createdPaths, finalPath)
+		e.nextSSTableID = id
+	}
+
+	return outputs, nil
 }
 
 func (e *Engine) applyCompaction(plan *compaction.Plan, outputs []*sstable.SSTable) error {
+	if plan == nil {
+		return fmt.Errorf("nil compaction plan")
+	}
+
+	level := plan.Level()
+	nextLevel := level + 1
+
+	e.ensureLevel(nextLevel)
+
+	e.sstables[level] = removeTables(e.sstables[level], plan.Inputs())
+	e.sstables[nextLevel] = removeTables(e.sstables[nextLevel], plan.Overlaps())
+
+	e.sstables[nextLevel] = append(outputs, e.sstables[nextLevel]...)
+
+	for _, table := range plan.Inputs() {
+		if err := os.Remove(table.Path()); err != nil {
+			return fmt.Errorf("remove compacted input sstable: %w", err)
+		}
+	}
+
+	for _, table := range plan.Overlaps() {
+		if err := os.Remove(table.Path()); err != nil {
+			return fmt.Errorf("remove compacted input sstable: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -393,4 +476,21 @@ func loadActiveWAL(dir string) (*wal.WAL, int, error) {
 
 func overlaps(a, b *sstable.SSTable) bool {
 	return !(bytes.Compare(a.MaxKey(), b.MinKey()) < 0 || bytes.Compare(b.MaxKey(), a.MinKey()) < 0)
+}
+
+func removeTables(tables []*sstable.SSTable, toRemove []*sstable.SSTable) []*sstable.SSTable {
+	removeSet := make(map[*sstable.SSTable]struct{}, len(toRemove))
+	for _, table := range toRemove {
+		removeSet[table] = struct{}{}
+	}
+
+	result := make([]*sstable.SSTable, 0, len(tables))
+	for _, table := range tables {
+		if _, ok := removeSet[table]; ok {
+			continue
+		}
+		result = append(result, table)
+	}
+
+	return result
 }
