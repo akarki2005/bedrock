@@ -17,6 +17,7 @@ import (
 )
 
 const defaultFlushThreshold = 4 << 20
+const baseLevelThreshold = 4
 
 type Engine struct {
 	mu             sync.RWMutex
@@ -230,6 +231,11 @@ func (e *Engine) flushImmutable() error {
 
 	e.ensureLevel(0)
 	e.sstables[0] = append([]*sstable.SSTable{table}, e.sstables[0]...)
+
+	if err := e.maybeCompact(); err != nil {
+		return err
+	}
+
 	e.immutable = nil
 	e.nextSSTableID = id
 
@@ -249,9 +255,14 @@ func (e *Engine) nextWALPath() (int, string) {
 }
 
 func (e *Engine) compactLevel(level int) error {
+	e.ensureLevel(level + 1)
+
 	plan, err := e.planCompaction(level)
 	if err != nil {
 		return fmt.Errorf("plan compaction: %w", err)
+	}
+	if plan == nil {
+		return nil
 	}
 
 	chunks, err := compaction.Run(plan)
@@ -277,7 +288,7 @@ func (e *Engine) planCompaction(level int) (*compaction.Plan, error) {
 	}
 
 	if len(e.sstables[level]) == 0 {
-		return nil, fmt.Errorf("no SSTables at level %d", level)
+		return nil, nil
 	}
 
 	input := e.sstables[level][0]
@@ -370,6 +381,25 @@ func (e *Engine) ensureLevel(level int) {
 	for len(e.sstables) <= level {
 		e.sstables = append(e.sstables, nil)
 	}
+}
+
+func (e *Engine) shouldCompact(level int) bool {
+	if level < 0 || level >= len(e.sstables) {
+		return false
+	}
+	return len(e.sstables[level]) > levelThreshold(level)
+}
+
+// cascading compaction algorithm
+func (e *Engine) maybeCompact() error {
+	for level := 0; level < len(e.sstables); level++ {
+		for e.shouldCompact(level) {
+			if err := e.compactLevel(level); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func loadSSTables(dir string) ([][]*sstable.SSTable, int, error) {
@@ -493,4 +523,8 @@ func removeTables(tables []*sstable.SSTable, toRemove []*sstable.SSTable) []*sst
 	}
 
 	return result
+}
+
+func levelThreshold(level int) int {
+	return baseLevelThreshold + level*2
 }
