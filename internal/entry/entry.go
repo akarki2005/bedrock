@@ -37,6 +37,28 @@ func newEntry(key, value []byte, tombstone bool) *Entry {
 	return e
 }
 
+func NewWithTimestamp(key, value []byte, ts int64) *Entry {
+	e := &Entry{
+		Key:       key,
+		Value:     value,
+		Timestamp: ts,
+		Tombstone: false,
+	}
+	e.Checksum = e.calculateChecksum()
+	return e
+}
+
+func NewTombstoneWithTimestamp(key []byte, ts int64) *Entry {
+	e := &Entry{
+		Key:       key,
+		Value:     nil,
+		Timestamp: ts,
+		Tombstone: true,
+	}
+	e.Checksum = e.calculateChecksum()
+	return e
+}
+
 func New(key, value []byte) *Entry {
 	return newEntry(key, value, false)
 }
