@@ -3,7 +3,7 @@ package compaction
 import (
 	"testing"
 
-	"github.com/akarki2005/lsm-engine/internal/entry"
+	"github.com/akarki2005/bedrock/internal/entry"
 )
 
 func mustHeapEntry(t *testing.T, key string, ts int64) *entry.Entry {

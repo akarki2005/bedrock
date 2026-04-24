@@ -1,4 +1,4 @@
-# LSM Storage Engine System Design
+# Bedrock System Design
 
 ## Functional Requirements
 

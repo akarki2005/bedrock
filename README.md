@@ -1,8 +1,8 @@
 <div align="center">
 
-# LSM Storage Engine   
+# Bedrock 
 
-[![codecov](https://codecov.io/gh/akarki2005/lsm-engine/branch/main/graph/badge.svg)](https://codecov.io/gh/akarki2005/lsm-engine)
+[![codecov](https://codecov.io/gh/akarki2005/bedrock/branch/main/graph/badge.svg)](https://codecov.io/gh/akarki2005/bedrock)
 
 A log-structured merge-tree (LSM) storage engine for key-value data, written in Go.
 
@@ -29,8 +29,8 @@ A log-structured merge-tree (LSM) storage engine for key-value data, written in 
 ## Installation
 
 ```bash
-git clone git@github.com:akarki2005/lsm-engine.git
-cd lsm-engine
+git clone git@github.com:akarki2005/bedrock.git
+cd bedrock
 ```
 
 ## Testing
@@ -52,13 +52,13 @@ go test -v ./...
 Build:
 
 ```bash
-go build -o lsm-cli ./cmd/cli
+go build -o bedrock-cli ./cmd/cli
 ```
 
 Operations:
 
 ```bash
-./lsm-cli -path ./data put <key> <value>
-./lsm-cli -path ./data get <key>
-./lsm-cli -path ./data delete <key>
+./bedrock-cli -path ./data put <key> <value>
+./bedrock-cli -path ./data get <key>
+./bedrock-cli -path ./data delete <key>
 ```

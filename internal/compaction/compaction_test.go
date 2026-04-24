@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/akarki2005/lsm-engine/internal/entry"
-	"github.com/akarki2005/lsm-engine/internal/sstable"
+	"github.com/akarki2005/bedrock/internal/entry"
+	"github.com/akarki2005/bedrock/internal/sstable"
 )
 
 func mustEntry(t *testing.T, key, value string, ts int64) *entry.Entry {

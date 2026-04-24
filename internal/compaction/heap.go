@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"container/heap"
 
-	"github.com/akarki2005/lsm-engine/internal/entry"
+	"github.com/akarki2005/bedrock/internal/entry"
 )
 
 type mergeItem struct {

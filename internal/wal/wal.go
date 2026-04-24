@@ -4,7 +4,7 @@ import (
 	"sync"
 	"os"
 	"path/filepath"
-	"github.com/akarki2005/lsm-engine/internal/entry"
+	"github.com/akarki2005/bedrock/internal/entry"
 	"fmt"
 	"encoding/binary"
 	"io"

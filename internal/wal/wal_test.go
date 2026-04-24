@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/akarki2005/lsm-engine/internal/entry"
+	"github.com/akarki2005/bedrock/internal/entry"
 )
 
 const recordLenSize = 4

@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/akarki2005/lsm-engine/internal/entry"
-	"github.com/akarki2005/lsm-engine/internal/memtable"
+	"github.com/akarki2005/bedrock/internal/entry"
+	"github.com/akarki2005/bedrock/internal/memtable"
 )
 
 func TestOpenReplaysWAL(t *testing.T) {

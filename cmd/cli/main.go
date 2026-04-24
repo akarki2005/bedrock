@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/akarki2005/lsm-engine/pkg/engine"
+	"github.com/akarki2005/bedrock/pkg/engine"
 )
 
 func usage() {

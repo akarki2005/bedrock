@@ -9,11 +9,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/akarki2005/lsm-engine/internal/compaction"
-	"github.com/akarki2005/lsm-engine/internal/entry"
-	"github.com/akarki2005/lsm-engine/internal/memtable"
-	"github.com/akarki2005/lsm-engine/internal/sstable"
-	"github.com/akarki2005/lsm-engine/internal/wal"
+	"github.com/akarki2005/bedrock/internal/compaction"
+	"github.com/akarki2005/bedrock/internal/entry"
+	"github.com/akarki2005/bedrock/internal/memtable"
+	"github.com/akarki2005/bedrock/internal/sstable"
+	"github.com/akarki2005/bedrock/internal/wal"
 )
 
 const defaultFlushThreshold = 4 << 20

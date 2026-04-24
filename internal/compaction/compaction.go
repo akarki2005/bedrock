@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/akarki2005/lsm-engine/internal/entry"
-	"github.com/akarki2005/lsm-engine/internal/sstable"
+	"github.com/akarki2005/bedrock/internal/entry"
+	"github.com/akarki2005/bedrock/internal/sstable"
 )
 
 const baseSSTableSizeBytes = 1 << 20
