@@ -10,9 +10,9 @@ import (
 
 func usage() {
 	fmt.Fprintf(os.Stderr, `Usage:
-	./lsm-cli -path ./data put <key> <value>
-	./lsm-cli -path ./data get <key>
-	./lsm-cli -path ./data delete <key>
+	./bedrock-cli -path ./data put <key> <value>
+	./bedrock-cli -path ./data get <key>
+	./bedrock-cli -path ./data delete <key>
 	`)
 	os.Exit(1)
 }
